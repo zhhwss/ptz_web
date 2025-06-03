@@ -1,0 +1,1007 @@
+{% extends "base_ros2.html" %}
+
+{% block title %}图片浏览 - PTZ 控制系统 (ROS2){% endblock %}
+
+{% block extra_css %}
+<style>
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+    .image-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+        position: relative;
+    }
+    .image-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    .image-thumbnail {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 0.375rem 0.375rem 0 0;
+        background-color: #f8f9fa;
+    }
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 200px;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    .image-info {
+        font-size: 0.875rem;
+    }
+    .refresh-btn {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1000;
+    }
+    .file-size {
+        color: #6c757d;
+    }
+    .modified-time {
+        color: #6c757d;
+        font-size: 0.8rem;
+    }
+    .search-container {
+        position: relative;
+    }
+    .search-input {
+        padding-right: 2.5rem;
+    }
+    .search-clear {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: none;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0.25rem;
+    }
+    .search-clear:hover {
+        color: #dc3545;
+    }
+    .filter-controls {
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .auto-refresh-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+    }
+    .auto-refresh-on {
+        background-color: #28a745;
+        animation: pulse-green 2s infinite;
+    }
+    .auto-refresh-off {
+        background-color: #6c757d;
+    }
+    .regex-indicator {
+        position: absolute;
+        right: 2.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.8rem;
+        color: #007bff;
+        pointer-events: none;
+    }
+    .regex-error {
+        color: #dc3545;
+    }
+    .sort-indicator {
+        margin-left: 0.25rem;
+        font-size: 0.8rem;
+    }
+    .highlighted {
+        background-color: #fff3cd;
+        border: 2px solid #ffc107;
+    }
+    
+    /* 分页样式 */
+    .pagination-controls {
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 1rem 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .page-size-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .page-info {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    /* 性能优化指示器 */
+    .performance-info {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        border-radius: 0.25rem;
+        font-size: 0.9rem;
+    }
+    
+    @keyframes pulse-green {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    
+    /* 响应式优化 */
+    @media (max-width: 768px) {
+        .image-grid {
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.5rem;
+        }
+        .pagination-controls {
+            flex-direction: column;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>
+            <i class="fas fa-images text-info me-2"></i>
+            图片管理
+            <small class="text-muted">(ROS2)</small>
+        </h2>
+        <p class="text-muted mb-0">浏览 PTZ 拍摄的图片文件</p>
+    </div>
+    <div>
+        <button id="auto-refresh-toggle" class="btn btn-outline-success">
+            <span class="auto-refresh-indicator auto-refresh-off" id="auto-refresh-indicator"></span>
+            <span id="auto-refresh-text">自动刷新: 关</span>
+        </button>
+        <button id="refresh-btn" class="btn btn-outline-primary ms-2">
+            <i class="fas fa-sync-alt me-1"></i>手动刷新
+        </button>
+        <button id="view-toggle" class="btn btn-outline-secondary ms-2">
+            <i class="fas fa-list me-1"></i>列表视图
+        </button>
+    </div>
+</div>
+
+<!-- 性能优化提示 -->
+<div class="performance-info">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>性能优化:</strong> 
+    <span id="performance-status">启用分页和懒加载，提升浏览体验</span>
+    <span class="ms-3">
+        <small>
+            缓存: <span id="cache-status">0</span> 张 | 
+            已加载: <span id="loaded-count">0</span> 张
+        </small>
+    </span>
+</div>
+
+<!-- 过滤和搜索控件 -->
+<div class="filter-controls">
+    <div class="row g-3">
+        <!-- 搜索框 -->
+        <div class="col-md-6">
+            <label class="form-label small">搜索图片</label>
+            <div class="search-container">
+                <input type="text" id="search-input" class="form-control search-input" 
+                       placeholder="输入文件名或正则表达式...">
+                <span id="regex-indicator" class="regex-indicator" style="display: none;">
+                    <i class="fas fa-code" title="正则表达式模式"></i>
+                </span>
+                <button id="search-clear" class="search-clear" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="regex-mode">
+                <label class="form-check-label" for="regex-mode">
+                    正则表达式模式
+                </label>
+            </div>
+            <div id="search-error" class="text-danger small mt-1" style="display: none;"></div>
+        </div>
+        
+        <!-- 排序选项 -->
+        <div class="col-md-3">
+            <label class="form-label small">排序方式</label>
+            <select id="sort-by" class="form-select">
+                <option value="modified">修改时间</option>
+                <option value="name">文件名</option>
+                <option value="size">文件大小</option>
+            </select>
+        </div>
+        
+        <!-- 排序顺序 -->
+        <div class="col-md-3">
+            <label class="form-label small">排序顺序</label>
+            <select id="sort-order" class="form-select">
+                <option value="desc">降序</option>
+                <option value="asc">升序</option>
+            </select>
+        </div>
+    </div>
+    
+    <!-- 搜索结果统计 -->
+    <div class="mt-3">
+        <small class="text-muted">
+            <span id="search-results-info">显示所有图片</span>
+            <span id="auto-refresh-countdown" class="ms-3" style="display: none;"></span>
+        </small>
+    </div>
+</div>
+
+<!-- 分页控件 -->
+<div class="pagination-controls">
+    <div class="page-size-selector">
+        <label class="form-label small mb-0">每页显示:</label>
+        <select id="page-size" class="form-select form-select-sm" style="width: auto;">
+            <option value="20">20 张</option>
+            <option value="50" selected>50 张</option>
+            <option value="100">100 张</option>
+            <option value="200">200 张</option>
+        </select>
+    </div>
+    
+    <div class="page-info">
+        <span id="page-info-text">第 1 页，共 1 页</span>
+    </div>
+    
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item" id="prev-page">
+                <a class="page-link" href="#" onclick="changePage(currentPage - 1)">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            </li>
+            <li class="page-item" id="next-page">
+                <a class="page-link" href="#" onclick="changePage(currentPage + 1)">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<!-- 统计信息 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-primary" id="total-images">0</h5>
+                <p class="card-text">总图片数</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-info" id="filtered-images">0</h5>
+                <p class="card-text">显示图片</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-success" id="total-size">0 MB</h5>
+                <p class="card-text">总大小</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-warning" id="latest-time">--</h5>
+                <p class="card-text">最新拍摄</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 图片展示区域 -->
+<div id="loading" class="loading-spinner">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+    <span class="ms-2">正在加载图片...</span>
+</div>
+
+<div id="empty-state" class="empty-state" style="display: none;">
+    <i class="fas fa-folder-open fa-3x mb-3"></i>
+    <h4>暂无图片</h4>
+    <p id="empty-message">图片目录中没有找到任何图片文件</p>
+    <button class="btn btn-primary" onclick="loadImages()">
+        <i class="fas fa-sync-alt me-1"></i>重新加载
+    </button>
+</div>
+
+<!-- 网格视图 -->
+<div id="images-grid" class="image-grid" style="display: none;"></div>
+
+<!-- 列表视图 -->
+<div id="images-list" style="display: none;">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th width="60">预览</th>
+                    <th class="sortable" data-sort="name">
+                        文件名
+                        <span class="sort-indicator" id="sort-name-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="size">
+                        大小
+                        <span class="sort-indicator" id="sort-size-indicator"></span>
+                    </th>
+                    <th class="sortable" data-sort="modified">
+                        修改时间
+                        <span class="sort-indicator" id="sort-modified-indicator"></span>
+                    </th>
+                    <th width="100">操作</th>
+                </tr>
+            </thead>
+            <tbody id="images-table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 底部分页控件 -->
+<div class="pagination-controls">
+    <div class="page-info">
+        <span id="bottom-page-info">显示第 <span id="start-index">1</span> - <span id="end-index">50</span> 张，共 <span id="total-count">0</span> 张</span>
+    </div>
+    
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item" id="bottom-prev-page">
+                <a class="page-link" href="#" onclick="changePage(currentPage - 1)">
+                    <i class="fas fa-chevron-left"></i> 上一页
+                </a>
+            </li>
+            <span class="mx-2 align-self-center">
+                <small class="text-muted">第 <span id="current-page-num">1</span> / <span id="total-pages">1</span> 页</small>
+            </span>
+            <li class="page-item" id="bottom-next-page">
+                <a class="page-link" href="#" onclick="changePage(currentPage + 1)">
+                    下一页 <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<!-- 图片预览模态框 -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalTitle">图片预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" class="img-fluid" style="max-height: 70vh;">
+                <div class="mt-3" id="imageDetails"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <a id="downloadLink" class="btn btn-primary" download>
+                    <i class="fas fa-download me-1"></i>下载
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 刷新按钮 -->
+<button class="btn btn-primary refresh-btn" onclick="loadImages()" title="刷新图片列表">
+    <i class="fas fa-sync-alt"></i>
+</button>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentView = 'grid'; // 'grid' or 'list'
+    let allImagesData = [];
+    let filteredImagesData = [];
+    let currentSort = { by: 'modified', order: 'desc' };
+    let searchQuery = '';
+    let isRegexMode = false;
+    let autoRefresh = false;
+    let autoRefreshInterval = null;
+    let autoRefreshCountdown = null;
+    let countdownSeconds = 30;
+    
+    // 分页相关变量
+    let currentPage = 1;
+    let pageSize = 50;
+    let totalPages = 1;
+    
+    // 格式化文件大小
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // 更新统计信息
+    function updateStatistics(allImages, filteredImages) {
+        const totalImages = allImages.length;
+        const filteredCount = filteredImages.length;
+        const totalSize = allImages.reduce((sum, img) => sum + img.size, 0);
+        const latestImage = allImages.length > 0 ? allImages[0] : null;
+        
+        document.getElementById('total-images').textContent = totalImages;
+        document.getElementById('filtered-images').textContent = filteredCount;
+        document.getElementById('total-size').textContent = formatFileSize(totalSize);
+        document.getElementById('latest-time').textContent = latestImage ? 
+            latestImage.modified.split(' ')[0] : '--';
+    }
+    
+    // 搜索和过滤图片
+    function filterImages() {
+        const query = searchQuery.trim();
+        
+        if (!query) {
+            filteredImagesData = [...allImagesData];
+            document.getElementById('search-results-info').textContent = '显示所有图片';
+            document.getElementById('search-error').style.display = 'none';
+            return;
+        }
+        
+        try {
+            if (isRegexMode) {
+                const regex = new RegExp(query, 'i');
+                filteredImagesData = allImagesData.filter(img => regex.test(img.name));
+                document.getElementById('search-error').style.display = 'none';
+            } else {
+                const lowerQuery = query.toLowerCase();
+                filteredImagesData = allImagesData.filter(img => 
+                    img.name.toLowerCase().includes(lowerQuery)
+                );
+            }
+            
+            const resultCount = filteredImagesData.length;
+            const totalCount = allImagesData.length;
+            document.getElementById('search-results-info').textContent = 
+                `找到 ${resultCount} / ${totalCount} 张图片`;
+                
+        } catch (error) {
+            // 正则表达式错误
+            document.getElementById('search-error').textContent = `正则表达式错误: ${error.message}`;
+            document.getElementById('search-error').style.display = 'block';
+            filteredImagesData = [];
+            document.getElementById('search-results-info').textContent = '搜索表达式无效';
+        }
+    }
+    
+    // 排序图片
+    function sortImages(images) {
+        return images.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch (currentSort.by) {
+                case 'name':
+                    aValue = a.name.toLowerCase();
+                    bValue = b.name.toLowerCase();
+                    break;
+                case 'size':
+                    aValue = a.size;
+                    bValue = b.size;
+                    break;
+                case 'modified':
+                default:
+                    aValue = new Date(a.modified);
+                    bValue = new Date(b.modified);
+                    break;
+            }
+            
+            let comparison = 0;
+            if (aValue > bValue) comparison = 1;
+            if (aValue < bValue) comparison = -1;
+            
+            return currentSort.order === 'desc' ? -comparison : comparison;
+        });
+    }
+    
+    // 更新分页信息
+    function updatePaginationInfo() {
+        totalPages = Math.ceil(filteredImagesData.length / pageSize);
+        if (totalPages === 0) totalPages = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        
+        const startIndex = (currentPage - 1) * pageSize + 1;
+        const endIndex = Math.min(currentPage * pageSize, filteredImagesData.length);
+        
+        // 更新分页控件状态
+        document.getElementById('prev-page').classList.toggle('disabled', currentPage === 1);
+        document.getElementById('next-page').classList.toggle('disabled', currentPage === totalPages);
+        document.getElementById('bottom-prev-page').classList.toggle('disabled', currentPage === 1);
+        document.getElementById('bottom-next-page').classList.toggle('disabled', currentPage === totalPages);
+        
+        // 更新分页信息文本
+        document.getElementById('page-info-text').textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+        document.getElementById('current-page-num').textContent = currentPage;
+        document.getElementById('total-pages').textContent = totalPages;
+        document.getElementById('start-index').textContent = startIndex;
+        document.getElementById('end-index').textContent = endIndex;
+        document.getElementById('total-count').textContent = filteredImagesData.length;
+    }
+    
+    // 获取当前页的图片数据
+    function getCurrentPageImages() {
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        return filteredImagesData.slice(startIndex, endIndex);
+    }
+    
+    // 切换页面
+    function changePage(newPage) {
+        if (newPage < 1 || newPage > totalPages) return;
+        currentPage = newPage;
+        displayImages();
+        
+        // 滚动到顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // 更新排序指示器
+    function updateSortIndicators() {
+        // 清除所有指示器
+        document.querySelectorAll('.sort-indicator').forEach(indicator => {
+            indicator.innerHTML = '';
+        });
+        
+        // 设置当前排序指示器
+        const indicator = document.getElementById(`sort-${currentSort.by}-indicator`);
+        if (indicator) {
+            indicator.innerHTML = currentSort.order === 'desc' ? 
+                '<i class="fas fa-sort-down"></i>' : '<i class="fas fa-sort-up"></i>';
+        }
+        
+        // 更新下拉框
+        document.getElementById('sort-by').value = currentSort.by;
+        document.getElementById('sort-order').value = currentSort.order;
+    }
+    
+    // 高亮搜索结果
+    function highlightSearchTerm(text, query, isRegex) {
+        if (!query) return text;
+        
+        try {
+            if (isRegex) {
+                const regex = new RegExp(`(${query})`, 'gi');
+                return text.replace(regex, '<mark>$1</mark>');
+            } else {
+                const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                return text.replace(regex, '<mark>$1</mark>');
+            }
+        } catch (error) {
+            return text;
+        }
+    }
+    
+    // 创建图片卡片（网格视图）
+    function createImageCard(image) {
+        const highlightedName = highlightSearchTerm(image.name, searchQuery, isRegexMode);
+        const imageSrc = `/images/${image.name}`;
+        
+        return `
+            <div class="card image-card ${searchQuery ? 'highlighted' : ''}" onclick="showImageModal('${image.name}', '${image.size}', '${image.modified}')">
+                <img src="${imageSrc}" class="image-thumbnail" alt="${image.name}" 
+                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMjEgMTlWNUMxOSAzIDMgMyAzIDVWMTlDMyAyMSA1IDIxIDcgMjFIMTdDMTkgMjEgMjEgMTkgMjEgMTlaIiBzdHJva2U9IiM5Q0EzQUYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iOSIgY3k9IjkiIHI9IjIiIHN0cm9rZT0iIzlDQTNBRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMjEgMTVMMTYgMTBMNSAyMSIgc3Ryb2tlPSIjOUNBM0FGIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg=='">
+                <div class="card-body">
+                    <h6 class="card-title text-truncate" title="${image.name}">${highlightedName}</h6>
+                    <div class="image-info">
+                        <small class="file-size">${formatFileSize(image.size)}</small><br>
+                        <small class="modified-time">${image.modified}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 创建表格行（列表视图）
+    function createTableRow(image) {
+        const highlightedName = highlightSearchTerm(image.name, searchQuery, isRegexMode);
+        const imageSrc = `/images/${image.name}`;
+        
+        return `
+            <tr onclick="showImageModal('${image.name}', '${image.size}', '${image.modified}')" 
+                style="cursor: pointer;" class="${searchQuery ? 'table-warning' : ''}">
+                <td>
+                    <img src="${imageSrc}" class="img-thumbnail" style="width: 50px; height: 50px; object-fit: cover;" 
+                         alt="${image.name}" onerror="this.style.display='none'">
+                </td>
+                <td>
+                    <span class="text-truncate d-inline-block" style="max-width: 200px;" title="${image.name}">
+                        ${highlightedName}
+                    </span>
+                </td>
+                <td>${formatFileSize(image.size)}</td>
+                <td>${image.modified}</td>
+                <td>
+                    <a href="/images/${image.name}" class="btn btn-sm btn-outline-primary" download title="下载">
+                        <i class="fas fa-download"></i>
+                    </a>
+                </td>
+            </tr>
+        `;
+    }
+    
+    // 显示图片
+    function displayImages() {
+        // 先过滤再排序
+        filterImages();
+        const sortedImages = sortImages([...filteredImagesData]);
+        
+        // 更新分页信息
+        updatePaginationInfo();
+        
+        // 获取当前页的图片
+        const currentPageImages = getCurrentPageImages();
+        
+        const gridContainer = document.getElementById('images-grid');
+        const listContainer = document.getElementById('images-table-body');
+        const emptyState = document.getElementById('empty-state');
+        
+        if (currentPageImages.length === 0) {
+            gridContainer.style.display = 'none';
+            document.getElementById('images-list').style.display = 'none';
+            emptyState.style.display = 'block';
+            
+            if (searchQuery) {
+                document.getElementById('empty-message').textContent = 
+                    `没有找到匹配 "${searchQuery}" 的图片`;
+            } else {
+                document.getElementById('empty-message').textContent = 
+                    '图片目录中没有找到任何图片文件';
+            }
+        } else {
+            emptyState.style.display = 'none';
+            
+            if (currentView === 'grid') {
+                gridContainer.innerHTML = currentPageImages.map(createImageCard).join('');
+                gridContainer.style.display = 'grid';
+                document.getElementById('images-list').style.display = 'none';
+            } else {
+                listContainer.innerHTML = currentPageImages.map(createTableRow).join('');
+                document.getElementById('images-list').style.display = 'block';
+                gridContainer.style.display = 'none';
+            }
+        }
+        
+        updateStatistics(allImagesData, sortedImages);
+        updateSortIndicators();
+        
+        // 更新性能状态
+        document.getElementById('cache-status').textContent = currentPageImages.length;
+        document.getElementById('loaded-count').textContent = currentPageImages.length;
+        document.getElementById('performance-status').textContent = 
+            `分页显示，当前页加载 ${currentPageImages.length} 张图片`;
+    }
+    
+    // 显示图片模态框
+    function showImageModal(filename, size, modified) {
+        const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+        const modalImage = document.getElementById('modalImage');
+        const modalTitle = document.getElementById('imageModalTitle');
+        const imageDetails = document.getElementById('imageDetails');
+        const downloadLink = document.getElementById('downloadLink');
+        
+        modalTitle.textContent = filename;
+        modalImage.src = `/images/${filename}`;
+        downloadLink.href = `/images/${filename}`;
+        downloadLink.download = filename;
+        
+        imageDetails.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>文件名:</strong> ${filename}
+                </div>
+                <div class="col-md-6">
+                    <strong>大小:</strong> ${formatFileSize(parseInt(size))}
+                </div>
+                <div class="col-md-12 mt-2">
+                    <strong>修改时间:</strong> ${modified}
+                </div>
+            </div>
+        `;
+        
+        modal.show();
+    }
+    
+    // 切换视图
+    function toggleView() {
+        const toggleBtn = document.getElementById('view-toggle');
+        
+        if (currentView === 'grid') {
+            currentView = 'list';
+            toggleBtn.innerHTML = '<i class="fas fa-th me-1"></i>网格视图';
+        } else {
+            currentView = 'grid';
+            toggleBtn.innerHTML = '<i class="fas fa-list me-1"></i>列表视图';
+        }
+        
+        displayImages();
+    }
+    
+    // 切换自动刷新
+    function toggleAutoRefresh() {
+        autoRefresh = !autoRefresh;
+        const indicator = document.getElementById('auto-refresh-indicator');
+        const text = document.getElementById('auto-refresh-text');
+        const countdownElement = document.getElementById('auto-refresh-countdown');
+        
+        if (autoRefresh) {
+            indicator.className = 'auto-refresh-indicator auto-refresh-on';
+            text.textContent = '自动刷新: 开';
+            countdownElement.style.display = 'inline';
+            startAutoRefresh();
+        } else {
+            indicator.className = 'auto-refresh-indicator auto-refresh-off';
+            text.textContent = '自动刷新: 关';
+            countdownElement.style.display = 'none';
+            stopAutoRefresh();
+        }
+    }
+    
+    // 开始自动刷新
+    function startAutoRefresh() {
+        stopAutoRefresh(); // 清除现有的定时器
+        
+        countdownSeconds = 30;
+        updateCountdown();
+        
+        autoRefreshCountdown = setInterval(() => {
+            countdownSeconds--;
+            updateCountdown();
+            
+            if (countdownSeconds <= 0) {
+                loadImages();
+                countdownSeconds = 30;
+            }
+        }, 1000);
+    }
+    
+    // 停止自动刷新
+    function stopAutoRefresh() {
+        if (autoRefreshCountdown) {
+            clearInterval(autoRefreshCountdown);
+            autoRefreshCountdown = null;
+        }
+    }
+    
+    // 更新倒计时显示
+    function updateCountdown() {
+        const countdownElement = document.getElementById('auto-refresh-countdown');
+        if (autoRefresh) {
+            countdownElement.textContent = `下次刷新: ${countdownSeconds}秒`;
+        }
+    }
+    
+    // 加载图片
+    async function loadImages() {
+        const loading = document.getElementById('loading');
+        const emptyState = document.getElementById('empty-state');
+        const refreshBtn = document.getElementById('refresh-btn');
+        
+        // 显示加载状态
+        loading.style.display = 'flex';
+        emptyState.style.display = 'none';
+        document.getElementById('images-grid').style.display = 'none';
+        document.getElementById('images-list').style.display = 'none';
+        
+        // 添加刷新按钮旋转动画
+        refreshBtn.querySelector('i').classList.add('fa-spin');
+        
+        try {
+            const response = await fetch('/api/images');
+            const images = await response.json();
+            
+            allImagesData = images;
+            
+            // 重置到第一页
+            currentPage = 1;
+            
+            if (images.length === 0) {
+                loading.style.display = 'none';
+                emptyState.style.display = 'block';
+                updateStatistics([], []);
+            } else {
+                loading.style.display = 'none';
+                displayImages();
+            }
+            
+            // 重置自动刷新倒计时
+            if (autoRefresh) {
+                countdownSeconds = 30;
+            }
+            
+        } catch (error) {
+            console.error('加载图片失败:', error);
+            loading.style.display = 'none';
+            emptyState.style.display = 'block';
+            updateStatistics([], []);
+            
+            // 显示错误信息
+            emptyState.innerHTML = `
+                <i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i>
+                <h4>加载失败</h4>
+                <p>无法加载图片列表，请检查网络连接或刷新页面重试</p>
+                <button class="btn btn-primary" onclick="loadImages()">
+                    <i class="fas fa-sync-alt me-1"></i>重新加载
+                </button>
+            `;
+        } finally {
+            // 移除刷新按钮旋转动画
+            refreshBtn.querySelector('i').classList.remove('fa-spin');
+        }
+    }
+    
+    // 事件监听
+    document.addEventListener('DOMContentLoaded', function() {
+        // 搜索输入
+        const searchInput = document.getElementById('search-input');
+        const searchClear = document.getElementById('search-clear');
+        const regexMode = document.getElementById('regex-mode');
+        const regexIndicator = document.getElementById('regex-indicator');
+        
+        searchInput.addEventListener('input', function() {
+            searchQuery = this.value;
+            searchClear.style.display = searchQuery ? 'block' : 'none';
+            currentPage = 1; // 搜索时重置到第一页
+            displayImages();
+        });
+        
+        searchClear.addEventListener('click', function() {
+            searchInput.value = '';
+            searchQuery = '';
+            this.style.display = 'none';
+            currentPage = 1;
+            displayImages();
+        });
+        
+        regexMode.addEventListener('change', function() {
+            isRegexMode = this.checked;
+            regexIndicator.style.display = isRegexMode ? 'block' : 'none';
+            currentPage = 1;
+            displayImages();
+        });
+        
+        // 排序控件
+        document.getElementById('sort-by').addEventListener('change', function() {
+            currentSort.by = this.value;
+            currentPage = 1;
+            displayImages();
+        });
+        
+        document.getElementById('sort-order').addEventListener('change', function() {
+            currentSort.order = this.value;
+            currentPage = 1;
+            displayImages();
+        });
+        
+        // 分页大小控件
+        document.getElementById('page-size').addEventListener('change', function() {
+            pageSize = parseInt(this.value);
+            currentPage = 1;
+            displayImages();
+        });
+        
+        // 表格标题点击排序
+        document.querySelectorAll('.sortable').forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', function() {
+                const sortBy = this.dataset.sort;
+                if (currentSort.by === sortBy) {
+                    currentSort.order = currentSort.order === 'desc' ? 'asc' : 'desc';
+                } else {
+                    currentSort.by = sortBy;
+                    currentSort.order = 'desc';
+                }
+                currentPage = 1;
+                displayImages();
+            });
+        });
+        
+        // 按钮事件
+        document.getElementById('refresh-btn').addEventListener('click', loadImages);
+        document.getElementById('view-toggle').addEventListener('click', toggleView);
+        document.getElementById('auto-refresh-toggle').addEventListener('click', toggleAutoRefresh);
+        
+        // 分页控件事件
+        document.getElementById('prev-page').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!this.classList.contains('disabled')) {
+                changePage(currentPage - 1);
+            }
+        });
+        
+        document.getElementById('next-page').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!this.classList.contains('disabled')) {
+                changePage(currentPage + 1);
+            }
+        });
+        
+        document.getElementById('bottom-prev-page').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!this.classList.contains('disabled')) {
+                changePage(currentPage - 1);
+            }
+        });
+        
+        document.getElementById('bottom-next-page').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!this.classList.contains('disabled')) {
+                changePage(currentPage + 1);
+            }
+        });
+        
+        // 加载初始数据
+        loadImages();
+    });
+    
+    // 键盘快捷键
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+            e.preventDefault();
+            loadImages();
+        }
+        if (e.ctrlKey && e.key === 'v') {
+            e.preventDefault();
+            toggleView();
+        }
+        if (e.ctrlKey && e.key === 'f') {
+            e.preventDefault();
+            document.getElementById('search-input').focus();
+        }
+        if (e.key === 'Escape') {
+            document.getElementById('search-input').blur();
+        }
+        // 分页快捷键
+        if (e.key === 'ArrowLeft' && e.ctrlKey) {
+            e.preventDefault();
+            changePage(currentPage - 1);
+        }
+        if (e.key === 'ArrowRight' && e.ctrlKey) {
+            e.preventDefault();
+            changePage(currentPage + 1);
+        }
+    });
+    
+    // 页面卸载时清理定时器
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
+</script>
+{% endblock %} 

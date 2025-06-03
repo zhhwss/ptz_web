@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}控制面板 - PTZ 控制系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 脚本执行控制 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-play-circle"></i> 脚本执行控制
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="scriptForm">
+                    <div class="mb-3">
+                        <label for="sampleSelect" class="form-label">选择样本:</label>
+                        <select class="form-select" id="sampleSelect" name="sample">
+                            {% for option in sample_options %}
+                            <option value="{{ option }}" {% if option == current_sample %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button type="submit" class="btn btn-primary" id="executeBtn">
+                            <i class="fas fa-play"></i> 执行脚本
+                        </button>
+                        <button type="button" class="btn btn-secondary ms-2" onclick="resetForm()">
+                            <i class="fas fa-undo"></i> 重置
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="executionResult" class="mt-3" style="display: none;">
+                    <!-- 执行结果将在这里显示 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ROS话题监听 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-broadcast-tower"></i> ROS话题监听
+                </h5>
+                <span id="connectionStatus" class="badge bg-secondary">连接中...</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>话题:</strong> <code>/ptz_manager/ptz_stable</code>
+                </div>
+                
+                <div class="status-card" id="ptzStatusCard">
+                    <h6><i class="fas fa-info-circle"></i> 当前状态</h6>
+                    <div id="ptzStatus">等待数据...</div>
+                    <small id="ptzTimestamp" class="d-block mt-2">
+                        <i class="fas fa-clock"></i> 暂无时间戳
+                    </small>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>历史记录</h6>
+                    <div id="statusHistory" class="border rounded p-2" style="height: 200px; overflow-y: auto; background-color: #f8f9fa;">
+                        <small class="text-muted">等待接收数据...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 执行日志 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-list-alt"></i> 执行日志
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearLog()">
+                    <i class="fas fa-trash"></i> 清空日志
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="executionLog" class="border rounded p-3" style="height: 300px; overflow-y: auto; background-color: #f8f9fa; font-family: monospace;">
+                    <small class="text-muted">等待执行命令...</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let socket;
+let statusHistory = [];
+
+// 初始化WebSocket连接
+function initWebSocket() {
+    socket = io();
+    
+    socket.on('connect', function() {
+        document.getElementById('connectionStatus').textContent = '已连接';
+        document.getElementById('connectionStatus').className = 'badge bg-success';
+        addLogEntry('WebSocket连接已建立', 'info');
+    });
+    
+    socket.on('disconnect', function() {
+        document.getElementById('connectionStatus').textContent = '已断开';
+        document.getElementById('connectionStatus').className = 'badge bg-danger';
+        addLogEntry('WebSocket连接已断开', 'warning');
+    });
+    
+    socket.on('ptz_status_update', function(data) {
+        updatePtzStatus(data);
+    });
+}
+
+// 更新PTZ状态
+function updatePtzStatus(data) {
+    document.getElementById('ptzStatus').textContent = data.status;
+    document.getElementById('ptzTimestamp').innerHTML = 
+        `<i class="fas fa-clock"></i> ${data.timestamp}`;
+    
+    // 添加到历史记录
+    statusHistory.unshift({
+        status: data.status,
+        timestamp: data.timestamp
+    });
+    
+    // 保持历史记录不超过50条
+    if (statusHistory.length > 50) {
+        statusHistory = statusHistory.slice(0, 50);
+    }
+    
+    updateStatusHistory();
+}
+
+// 更新状态历史记录
+function updateStatusHistory() {
+    const historyDiv = document.getElementById('statusHistory');
+    
+    if (statusHistory.length === 0) {
+        historyDiv.innerHTML = '<small class="text-muted">暂无历史记录</small>';
+        return;
+    }
+    
+    let historyHtml = '';
+    statusHistory.forEach((item, index) => {
+        historyHtml += `
+            <div class="mb-1 ${index === 0 ? 'fw-bold' : ''}">
+                <small class="text-muted">${item.timestamp}</small><br>
+                <span>${item.status}</span>
+            </div>
+        `;
+    });
+    
+    historyDiv.innerHTML = historyHtml;
+}
+
+// 执行脚本
+function executeScript() {
+    const form = document.getElementById('scriptForm');
+    const formData = new FormData(form);
+    const selectedSample = formData.get('sample');
+    
+    const executeBtn = document.getElementById('executeBtn');
+    executeBtn.disabled = true;
+    executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行中...';
+    
+    addLogEntry(`开始执行脚本，样本: ${selectedSample}`, 'info');
+    
+    fetch('/api/execute_script', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            sample: selectedSample
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        executeBtn.disabled = false;
+        executeBtn.innerHTML = '<i class="fas fa-play"></i> 执行脚本';
+        
+        const resultDiv = document.getElementById('executionResult');
+        resultDiv.style.display = 'block';
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> ${data.message}
+                    ${data.output ? `<pre class="mt-2 mb-0">${data.output}</pre>` : ''}
+                </div>
+            `;
+            addLogEntry(`执行成功: ${data.message}`, 'success');
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> ${data.message}
+                    ${data.output ? `<pre class="mt-2 mb-0">${data.output}</pre>` : ''}
+                </div>
+            `;
+            addLogEntry(`执行失败: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        executeBtn.disabled = false;
+        executeBtn.innerHTML = '<i class="fas fa-play"></i> 执行脚本';
+        
+        const resultDiv = document.getElementById('executionResult');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle"></i> 网络错误: ${error.message}
+            </div>
+        `;
+        addLogEntry(`网络错误: ${error.message}`, 'error');
+    });
+}
+
+// 添加日志条目
+function addLogEntry(message, type = 'info') {
+    const logDiv = document.getElementById('executionLog');
+    const timestamp = new Date().toLocaleString();
+    
+    let iconClass, textClass;
+    switch (type) {
+        case 'success':
+            iconClass = 'fas fa-check-circle text-success';
+            textClass = 'text-success';
+            break;
+        case 'error':
+            iconClass = 'fas fa-exclamation-circle text-danger';
+            textClass = 'text-danger';
+            break;
+        case 'warning':
+            iconClass = 'fas fa-exclamation-triangle text-warning';
+            textClass = 'text-warning';
+            break;
+        default:
+            iconClass = 'fas fa-info-circle text-info';
+            textClass = 'text-info';
+    }
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = 'mb-2';
+    logEntry.innerHTML = `
+        <small class="text-muted">[${timestamp}]</small>
+        <i class="${iconClass}"></i>
+        <span class="${textClass}">${message}</span>
+    `;
+    
+    // 如果日志为空，先清空占位文本
+    if (logDiv.innerHTML.includes('等待执行命令')) {
+        logDiv.innerHTML = '';
+    }
+    
+    logDiv.insertBefore(logEntry, logDiv.firstChild);
+    
+    // 保持日志不超过100条
+    const entries = logDiv.children;
+    if (entries.length > 100) {
+        logDiv.removeChild(entries[entries.length - 1]);
+    }
+}
+
+// 清空日志
+function clearLog() {
+    document.getElementById('executionLog').innerHTML = 
+        '<small class="text-muted">日志已清空</small>';
+}
+
+// 重置表单
+function resetForm() {
+    document.getElementById('scriptForm').reset();
+    document.getElementById('executionResult').style.display = 'none';
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    initWebSocket();
+    
+    // 表单提交事件
+    document.getElementById('scriptForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        executeScript();
+    });
+    
+    // 加载初始PTZ状态
+    fetch('/api/ptz_status')
+        .then(response => response.json())
+        .then(data => {
+            updatePtzStatus(data);
+        })
+        .catch(error => {
+            console.error('Error loading initial PTZ status:', error);
+        });
+});
+</script>
+{% endblock %} 

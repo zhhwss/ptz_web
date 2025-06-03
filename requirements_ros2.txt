@@ -1,0 +1,22 @@
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+python-socketio==5.8.0
+python-engineio==4.7.1
+eventlet==0.33.3
+Werkzeug==2.3.7
+
+# ROS2 Python dependencies
+# 注意：这些通常通过ROS2安装提供，不需要pip安装
+# rclpy
+# std_msgs
+# 如果系统中没有ROS2，可以尝试：
+# ros2-python==0.1.0  # 这是一个示例，实际可能不存在这个包
+
+# 如果需要手动安装ROS2 Python绑定，请参考ROS2官方文档 
+
+# ROS2 Python 绑定 (通常通过系统包管理器安装)
+# rclpy  # 通过 apt install python3-rclpy 安装
+
+# 可选依赖
+Pillow==10.0.1  # 用于图片处理
+requests==2.31.0  # 用于 HTTP 请求 

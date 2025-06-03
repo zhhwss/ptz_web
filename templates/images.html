@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}图片浏览 - PTZ 控制系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-images"></i> 实时图片浏览
+                </h5>
+                <div>
+                    <button id="refreshBtn" class="btn btn-primary btn-sm">
+                        <i class="fas fa-sync-alt"></i> 刷新
+                    </button>
+                    <div class="form-check form-switch d-inline-block ms-3">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label" for="autoRefresh">
+                            自动刷新 (5秒)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="imageStats" class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span id="imageCount">加载中...</span>
+                </div>
+                
+                <div id="imageGrid" class="image-grid">
+                    <!-- 图片将通过JavaScript动态加载 -->
+                </div>
+                
+                <div id="loadingSpinner" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p class="mt-2">正在加载图片...</p>
+                </div>
+                
+                <div id="noImages" class="text-center py-5" style="display: none;">
+                    <i class="fas fa-image fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">暂无图片</h5>
+                    <p class="text-muted">图片目录中没有找到任何图片文件</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 图片预览模态框 -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalTitle">图片预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalImage" src="" class="img-fluid" alt="图片预览">
+                <div id="imageInfo" class="mt-3">
+                    <!-- 图片信息将在这里显示 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let autoRefreshInterval;
+let isAutoRefresh = true;
+
+// 加载图片列表
+function loadImages() {
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('imageGrid').innerHTML = '';
+    
+    fetch('/api/images')
+        .then(response => response.json())
+        .then(images => {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            
+            if (images.length === 0) {
+                document.getElementById('noImages').style.display = 'block';
+                document.getElementById('imageCount').textContent = '目录中没有图片文件';
+                return;
+            }
+            
+            document.getElementById('noImages').style.display = 'none';
+            document.getElementById('imageCount').textContent = `共找到 ${images.length} 张图片`;
+            
+            const imageGrid = document.getElementById('imageGrid');
+            
+            images.forEach(image => {
+                const imageCard = document.createElement('div');
+                imageCard.className = 'image-card card';
+                
+                // 格式化文件大小
+                const fileSize = formatFileSize(image.size);
+                
+                imageCard.innerHTML = `
+                    <img src="/images/${image.name}" alt="${image.name}" 
+                         onclick="showImageModal('${image.name}', '${image.modified}', '${fileSize}')">
+                    <div class="card-body">
+                        <h6 class="card-title text-truncate" title="${image.name}">${image.name}</h6>
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i> ${image.modified}<br>
+                            <i class="fas fa-file"></i> ${fileSize}
+                        </small>
+                    </div>
+                `;
+                
+                imageGrid.appendChild(imageCard);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading images:', error);
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('imageCount').textContent = '加载图片时出错';
+        });
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 显示图片模态框
+function showImageModal(filename, modified, fileSize) {
+    document.getElementById('imageModalTitle').textContent = filename;
+    document.getElementById('modalImage').src = `/images/${filename}`;
+    document.getElementById('imageInfo').innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <strong>文件名:</strong> ${filename}
+            </div>
+            <div class="col-md-6">
+                <strong>修改时间:</strong> ${modified}
+            </div>
+            <div class="col-md-6">
+                <strong>文件大小:</strong> ${fileSize}
+            </div>
+            <div class="col-md-6">
+                <strong>操作:</strong> 
+                <a href="/images/${filename}" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-external-link-alt"></i> 新窗口打开
+                </a>
+            </div>
+        </div>
+    `;
+    
+    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+    modal.show();
+}
+
+// 设置自动刷新
+function setupAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+    
+    if (isAutoRefresh) {
+        autoRefreshInterval = setInterval(loadImages, 5000); // 每5秒刷新
+    }
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadImages();
+    setupAutoRefresh();
+    
+    // 刷新按钮事件
+    document.getElementById('refreshBtn').addEventListener('click', loadImages);
+    
+    // 自动刷新开关事件
+    document.getElementById('autoRefresh').addEventListener('change', function() {
+        isAutoRefresh = this.checked;
+        setupAutoRefresh();
+    });
+});
+</script>
+{% endblock %} 

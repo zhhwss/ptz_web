@@ -1,0 +1,227 @@
+{% extends "base_ros2.html" %}
+
+{% block title %}PTZ 控制系统首页 (ROS2){% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 欢迎信息 -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h1 class="card-title">
+                    <i class="fas fa-robot text-primary me-3"></i>
+                    PTZ 控制系统
+                    <small class="text-muted fs-6">(ROS2 版本)</small>
+                </h1>
+                <p class="card-text lead">基于 ROS2 的云台控制和图像管理系统</p>
+                <p class="text-muted">
+                    使用 ROS2 话题通信，实时监控 PTZ 状态，智能样本控制
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- PTZ 状态卡片 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card status-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-eye me-2"></i>PTZ 实时状态
+                </h5>
+                <div id="ptz-status-display" class="ptz-status">
+                    <div id="ptz-status-text">加载中...</div>
+                    <div id="ptz-timestamp" class="timestamp mt-2">--</div>
+                </div>
+                <div class="mt-3">
+                    <small>
+                        <i class="fas fa-satellite-dish me-1"></i>
+                        话题: /ptz_manager/ptz_stable
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ROS2 系统状态 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-cogs me-2"></i>ROS2 系统状态
+                </h5>
+                <div id="ros-system-status">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>节点连接:</span>
+                        <span id="node-status" class="badge bg-secondary">检查中...</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>话题订阅:</span>
+                        <span id="topic-status" class="badge bg-secondary">检查中...</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>消息发布:</span>
+                        <span id="publish-status" class="badge bg-secondary">检查中...</span>
+                    </div>
+                </div>
+                <hr>
+                <small class="text-muted">
+                    <i class="fas fa-info-circle me-1"></i>
+                    系统环境: ROS2 Humble
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 功能导航 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">
+                    <i class="fas fa-images text-info me-2"></i>图片管理
+                </h5>
+                <p class="card-text">
+                    浏览和管理 PTZ 拍摄的图片文件，支持实时预览和详细信息查看。
+                </p>
+                <div class="mt-auto">
+                    <a href="/images" class="btn btn-info">
+                        <i class="fas fa-folder-open me-1"></i>浏览图片
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">
+                    <i class="fas fa-gamepad text-success me-2"></i>PTZ 控制
+                </h5>
+                <p class="card-text">
+                    通过 ROS2 话题控制 PTZ 设备，选择预设样本，实时监控设备状态。
+                </p>
+                <div class="mt-auto">
+                    <a href="/control" class="btn btn-ros">
+                        <i class="fas fa-robot me-1"></i>控制面板
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 系统信息 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>系统信息
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <strong>ROS2 话题:</strong>
+                        <ul class="list-unstyled mt-2">
+                            <li><small><code>/ptz_manager/ptz_stable</code> (订阅)</small></li>
+                            <li><small><code>/sample_face/set_index</code> (发布)</small></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>支持功能:</strong>
+                        <ul class="list-unstyled mt-2">
+                            <li><small><i class="fas fa-check text-success me-1"></i>实时状态监控</small></li>
+                            <li><small><i class="fas fa-check text-success me-1"></i>样本命令发布</small></li>
+                            <li><small><i class="fas fa-check text-success me-1"></i>WebSocket 通信</small></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>通信方式:</strong>
+                        <ul class="list-unstyled mt-2">
+                            <li><small><i class="fas fa-wifi me-1"></i>WebSocket (实时更新)</small></li>
+                            <li><small><i class="fas fa-exchange-alt me-1"></i>REST API</small></li>
+                            <li><small><i class="fas fa-robot me-1"></i>ROS2 话题</small></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // PTZ 状态更新处理
+    function updatePtzStatus(data) {
+        const statusText = document.getElementById('ptz-status-text');
+        const timestamp = document.getElementById('ptz-timestamp');
+        
+        statusText.textContent = data.status || '无数据';
+        timestamp.textContent = `更新时间: ${data.timestamp || '--'}`;
+        
+        // 添加动画效果
+        statusText.classList.add('pulse');
+        setTimeout(() => {
+            statusText.classList.remove('pulse');
+        }, 1000);
+    }
+    
+    // 更新 ROS 系统状态显示
+    function updateRosSystemStatus(connected, error) {
+        const nodeStatus = document.getElementById('node-status');
+        const topicStatus = document.getElementById('topic-status');
+        const publishStatus = document.getElementById('publish-status');
+        
+        if (connected) {
+            nodeStatus.className = 'badge bg-success';
+            nodeStatus.textContent = '已连接';
+            topicStatus.className = 'badge bg-success';
+            topicStatus.textContent = '正常';
+            publishStatus.className = 'badge bg-success';
+            publishStatus.textContent = '可用';
+        } else {
+            nodeStatus.className = 'badge bg-danger';
+            nodeStatus.textContent = '断开';
+            topicStatus.className = 'badge bg-danger';
+            topicStatus.textContent = '不可用';
+            publishStatus.className = 'badge bg-danger';
+            publishStatus.textContent = '不可用';
+        }
+    }
+    
+    // WebSocket 事件监听
+    socket.on('ptz_status_update', updatePtzStatus);
+    
+    // 监听 ROS 状态变化
+    socket.on('ros_status_update', function(data) {
+        updateRosSystemStatus(data.connected, data.error);
+    });
+    
+    // 获取初始状态
+    function loadInitialStatus() {
+        // 获取 PTZ 状态
+        fetch('/api/ptz_status')
+            .then(response => response.json())
+            .then(data => {
+                updatePtzStatus(data);
+                updateRosSystemStatus(data.ros_connected, data.ros_error);
+            })
+            .catch(error => {
+                console.error('获取初始状态失败:', error);
+                updatePtzStatus({
+                    status: '获取状态失败',
+                    timestamp: new Date().toLocaleString()
+                });
+            });
+    }
+    
+    // 页面加载完成后获取初始状态
+    document.addEventListener('DOMContentLoaded', loadInitialStatus);
+</script>
+{% endblock %} 

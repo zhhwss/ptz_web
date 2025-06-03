@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}PTZ 控制系统 - 主页{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card text-center">
+            <div class="card-body p-5">
+                <h1 class="card-title mb-4">
+                    <i class="fas fa-camera fa-2x text-primary"></i>
+                    <br>PTZ 控制系统
+                </h1>
+                <p class="card-text lead mb-4">
+                    欢迎使用PTZ控制系统！这里可以浏览实时图片、控制设备参数和监控系统状态。
+                </p>
+                
+                <div class="row mt-5">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <i class="fas fa-images fa-3x text-info mb-3"></i>
+                                <h5 class="card-title">图片浏览</h5>
+                                <p class="card-text">查看 ~/ptz_ws/images 目录中的实时生成图片</p>
+                                <a href="/images" class="btn btn-primary">
+                                    <i class="fas fa-eye"></i> 浏览图片
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <i class="fas fa-cogs fa-3x text-success mb-3"></i>
+                                <h5 class="card-title">控制面板</h5>
+                                <p class="card-text">执行脚本命令和监控ROS话题状态</p>
+                                <a href="/control" class="btn btn-primary">
+                                    <i class="fas fa-sliders-h"></i> 打开控制面板
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>系统信息：</strong>
+                            <ul class="list-unstyled mt-2 mb-0">
+                                <li><i class="fas fa-folder"></i> 图片目录: ~/ptz_ws/images</li>
+                                <li><i class="fas fa-file-code"></i> 脚本路径: ~/ptz_ws/pub_sample.sh</li>
+                                <li><i class="fas fa-broadcast-tower"></i> 监听话题: /ptz_manager/ptz_stable</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
