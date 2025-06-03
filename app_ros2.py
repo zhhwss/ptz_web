@@ -314,11 +314,11 @@ if ROS2_AVAILABLE:
             current_time = time.time()
             if current_time - self.last_message_time > 10:  # 10秒没有收到消息
                 global ptz_status
-            ptz_status = {
-                        "status": "等待数据... (可能话题未发布)",
-                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            socketio.emit('ptz_status_update', ptz_status)
+                ptz_status = {
+                            "status": "等待数据... (可能话题未发布)",
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                socketio.emit('ptz_status_update', ptz_status)
         
         def publish_sample_command(self, sample_name):
             """发布样本命令"""
