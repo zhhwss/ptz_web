@@ -20,7 +20,7 @@ try:
     from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
     from std_msgs.msg import String
     from std_msgs.msg import Bool  # 假设ptz_stable是Bool类型，根据实际情况调整
-    from ai_msgs.msg import PerceptionTargets  # 导入人体检测消息类型
+    from ai_msgs.msg import PerceptionTargets  # 导入人脸检测消息类型
     ROS2_AVAILABLE = True
 except ImportError as e:
     print(f"ROS2 Python模块导入失败: {e}")
@@ -61,7 +61,7 @@ tracking_status_data = {
 
 # 动态获取样本选项
 def get_sample_options():
-    """从 detection_output 目录动态获取有效的样本选项"""
+    """从 face_detect/detection_output 目录动态获取有效的样本选项"""
     sample_options = []
     
     try:
@@ -94,51 +94,51 @@ def get_sample_options():
                 with open(results_json_path, 'r', encoding='utf-8') as f:
                     results_data = json.load(f)
                 
-                # 检查是否包含 head 类型的检测结果
-                has_head = False
+                # 检查是否包含 face 类型的检测结果
+                has_face = False
                 
                 # 检查 raw_detections 数组
                 if 'raw_detections' in results_data:
                     for detection in results_data['raw_detections']:
                         if isinstance(detection, dict) and 'rois' in detection:
                             for roi in detection['rois']:
-                                if isinstance(roi, dict) and roi.get('type') == 'head':
-                                    has_head = True
+                                if isinstance(roi, dict) and roi.get('type') == 'face':
+                                    has_face = True
                                     break
-                        if has_head:
+                        if has_face:
                             break
                 
                 # 如果 raw_detections 中没有找到，检查 transformed_detections
-                if not has_head and 'transformed_detections' in results_data:
+                if not has_face and 'transformed_detections' in results_data:
                     for detection in results_data['transformed_detections']:
                         if isinstance(detection, dict) and 'rois' in detection:
                             for roi in detection['rois']:
-                                if isinstance(roi, dict) and roi.get('type') == 'head':
-                                    has_head = True
+                                if isinstance(roi, dict) and roi.get('type') == 'face':
+                                    has_face = True
                                     break
-                        if has_head:
+                        if has_face:
                             break
                 
                 # 兼容旧格式：直接检查顶层或results字段
-                if not has_head:
+                if not has_face:
                     if isinstance(results_data, list):
                         # 如果是列表，检查每个元素
                         for result in results_data:
-                            if isinstance(result, dict) and result.get('type') == 'head':
-                                has_head = True
+                            if isinstance(result, dict) and result.get('type') == 'face':
+                                has_face = True
                                 break
                     elif isinstance(results_data, dict):
-                        # 如果是字典，检查是否有 head 类型
-                        if results_data.get('type') == 'head':
-                            has_head = True
-                        # 或者检查是否有包含 head 的结果列表
+                        # 如果是字典，检查是否有 face 类型
+                        if results_data.get('type') == 'face':
+                            has_face = True
+                        # 或者检查是否有包含 face 的结果列表
                         elif 'results' in results_data:
                             for result in results_data['results']:
-                                if isinstance(result, dict) and result.get('type') == 'head':
-                                    has_head = True
+                                if isinstance(result, dict) and result.get('type') == 'face':
+                                    has_face = True
                                     break
                 
-                if has_head:
+                if has_face:
                     sample_options.append({
                         'name': item,
                         'path': item_path,
@@ -146,7 +146,7 @@ def get_sample_options():
                     })
                     print(f"✓ 添加样本: {item}")
                 else:
-                    print(f"跳过 {item}: results.json 中没有 head 类型的检测结果")
+                    print(f"跳过 {item}: results.json 中没有 face 类型的检测结果")
                     
             except json.JSONDecodeError as e:
                 print(f"跳过 {item}: results.json 格式错误 - {e}")
@@ -230,7 +230,7 @@ if ROS2_AVAILABLE:
                     depth=1
                 )
                 
-                # 订阅人体检测话题
+                # 订阅人脸检测话题
                 self.face_detection_sub = self.create_subscription(
                     PerceptionTargets,
                     # '/hobot_face_landmarks_detection',
@@ -238,9 +238,9 @@ if ROS2_AVAILABLE:
                     self.face_detection_callback,
                     qos_profile_sub
                 )
-                self.get_logger().info('已订阅人体检测话题: /hobot_mono2d_body_detection')
+                self.get_logger().info('已订阅人脸检测话题: /hobot_mono2d_body_detection')
             except Exception as e:
-                self.get_logger().warn(f'订阅人体检测话题失败: {e}')
+                self.get_logger().warn(f'订阅人脸检测话题失败: {e}')
                 self.face_detection_sub = None
             
             # 创建发布者发送样本命令
@@ -266,7 +266,7 @@ if ROS2_AVAILABLE:
             # 创建定时器定期检查连接状态
             self.status_timer = self.create_timer(5.0, self.check_connection_status)
             
-            # 创建定时器定期计算人体检测帧率
+            # 创建定时器定期计算人脸检测帧率
             self.face_fps_timer = self.create_timer(1.0, self.calculate_face_fps)
             
             # 创建定时器定期获取系统状态
@@ -286,7 +286,7 @@ if ROS2_AVAILABLE:
             self.sample_confirmation_timeout = 10.0  # 10秒超时
             self.sample_send_time = None
             
-            # 用于计算人体检测帧率
+            # 用于计算人脸检测帧率
             self.face_message_times = []
             self.face_fps = 0.0
             self.last_face_message_time = 0
@@ -469,7 +469,7 @@ if ROS2_AVAILABLE:
                 self.get_logger().error(f'处理外部目标点消息时出错: {e}')
 
         def face_detection_callback(self, msg):
-            """人体检测回调函数"""
+            """人脸检测回调函数"""
             try:
                 current_time = time.time()
                 self.last_face_message_time = current_time  # 更新最后收到消息的时间
@@ -480,10 +480,10 @@ if ROS2_AVAILABLE:
                 self.face_message_times = [t for t in self.face_message_times if t > cutoff_time]
                 
             except Exception as e:
-                self.get_logger().error(f'处理人体检测数据时出错: {e}')
+                self.get_logger().error(f'处理人脸检测数据时出错: {e}')
 
         def calculate_face_fps(self):
-            """计算人体检测帧率"""
+            """计算人脸检测帧率"""
             try:
                 current_time = time.time()
                 
@@ -508,12 +508,12 @@ if ROS2_AVAILABLE:
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     })
                 except Exception as e:
-                    self.get_logger().warn(f"发送人体帧率WebSocket更新失败: {e}")
+                    self.get_logger().warn(f"发送人脸帧率WebSocket更新失败: {e}")
                 
-                self.get_logger().info(f"人体检测帧率: {self.face_fps:.2f} FPS, 消息数: {len(self.face_message_times)}")
+                self.get_logger().info(f"人脸检测帧率: {self.face_fps:.2f} FPS, 消息数: {len(self.face_message_times)}")
                 
             except Exception as e:
-                self.get_logger().error(f"计算人体检测帧率时出错: {e}")
+                self.get_logger().error(f"计算人脸检测帧率时出错: {e}")
                 self.face_fps = 0.0
 
         def update_system_status(self):
@@ -1123,7 +1123,7 @@ def api_target_point_status():
 
 @app.route('/api/face_fps_status')
 def api_face_fps_status():
-    """获取人体检测帧率状态的API"""
+    """获取人脸检测帧率状态的API"""
     if ros_node and hasattr(ros_node, 'face_fps'):
         return jsonify({
             'fps': round(ros_node.face_fps, 2),

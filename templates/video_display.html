@@ -157,6 +157,83 @@
         background: rgba(0, 0, 0, 0.9);
         color: white;
     }
+    
+    /* 新增：追踪控制面板样式 */
+    .tracking-control-panel {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border: none;
+        color: white;
+    }
+    
+    .tracking-control-panel .card-header {
+        background: rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .status-active {
+        background-color: #28a745;
+        animation: pulse-green 2s infinite;
+    }
+    
+    .status-lost {
+        background-color: #ffc107;
+        animation: pulse-yellow 2s infinite;
+    }
+    
+    .status-idle {
+        background-color: #6c757d;
+    }
+    
+    .status-error {
+        background-color: #dc3545;
+        animation: pulse-red 2s infinite;
+    }
+    
+    @keyframes pulse-red {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    
+    .face-id-badge {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        margin: 2px;
+    }
+    
+    .face-id-badge:hover {
+        transform: scale(1.1);
+    }
+    
+    .face-id-badge.current {
+        background-color: #28a745 !important;
+        animation: pulse-green 2s infinite;
+    }
+    
+    .btn-check:checked + .btn {
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .mode-description {
+        min-height: 20px;
+        transition: all 0.3s ease;
+    }
+    
+    /* 新增：通知动画样式 */
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .notification-enter {
+        animation: slideInRight 0.3s ease;
+    }
 </style>
 {% endblock %}
 
@@ -180,7 +257,7 @@
 <div class="card control-panel mb-4">
     <div class="card-body">
         <div class="row align-items-center">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <h6 class="mb-2">
                     <i class="fas fa-satellite-dish me-2"></i>视频流状态
                 </h6>
@@ -193,7 +270,22 @@
                 </small>
             </div>
             
-            <div class="col-md-6 text-md-end mt-3 mt-md-0">
+            <!-- 新增：追踪状态显示 -->
+            <div class="col-md-4">
+                <h6 class="mb-2">
+                    <i class="fas fa-crosshairs me-2"></i>追踪状态
+                </h6>
+                <div class="d-flex align-items-center mb-1">
+                    <span class="status-indicator status-loading" id="tracking-status-indicator"></span>
+                    <span id="tracking-status-text">等待追踪数据...</span>
+                </div>
+                <small class="text-light" id="tracking-status-details">
+                    当前ID: <span id="current-tracking-id">无</span> | 
+                    模式: <span id="tracking-mode">未知</span>
+                </small>
+            </div>
+            
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
                 <div class="btn-group" role="group">
                     <button type="button" class="btn btn-outline-light refresh-btn" onclick="refreshVideo()">
                         <i class="fas fa-sync-alt me-1"></i>刷新视频
@@ -204,6 +296,70 @@
                     <button type="button" class="btn btn-outline-light" onclick="openInNewTab()">
                         <i class="fas fa-external-link-alt me-1"></i>新标签页
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增：追踪控制面板 -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-gamepad me-2"></i>追踪控制面板
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center mb-3">
+                    <label class="form-label me-3 mb-0">追踪模式:</label>
+                    <div class="d-flex align-items-center">
+                        <div id="mode-default-indicator" class="me-3">
+                            <i class="fas fa-robot text-primary me-1"></i>
+                            <span class="text-primary">默认模式</span>
+                        </div>
+                        <div id="mode-specified-indicator">
+                            <i class="fas fa-bullseye text-muted me-1"></i>
+                            <span class="text-muted">指定ID</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mode-description">
+                    <small class="text-muted" id="mode-description-text">
+                        默认模式：永远追踪最小ID，无等待逻辑
+                    </small>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="d-flex align-items-center">
+                    <label class="form-label me-3 mb-0">指定追踪ID:</label>
+                    <div class="input-group" style="max-width: 200px;">
+                        <input type="number" class="form-control" id="target-face-id" 
+                               placeholder="输入ID" min="1" max="99" value="1">
+                        <button class="btn btn-primary" type="button" onclick="switchTrackingTarget()">
+                            <i class="fas fa-crosshairs me-1"></i>追踪
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <button class="btn btn-secondary btn-sm" onclick="switchToAutoMode()">
+                        <i class="fas fa-undo me-1"></i>切换到自动模式
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 可用人脸ID显示 -->
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="d-flex align-items-center">
+                    <span class="me-3"><strong>可用人脸ID:</strong></span>
+                    <div id="available-face-ids" class="d-flex flex-wrap">
+                        <span class="badge bg-secondary me-1">暂无数据</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -294,37 +450,135 @@
 <script>
     let isFullscreen = false;
     let videoCheckInterval;
+    let trackingStatusInterval;
+    
+    // 调试：添加日志功能
+    function debugLog(message) {
+        console.log(`[DEBUG] ${new Date().toLocaleTimeString()}: ${message}`);
+    }
     
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function() {
-        initializeVideo();
-        startVideoStatusCheck();
+        debugLog('页面开始初始化');
+        
+        try {
+            debugLog('初始化视频...');
+            initializeVideo();
+            
+            debugLog('开始视频状态检查...');
+            startVideoStatusCheck();
+            
+            debugLog('初始化追踪控制...');
+            initializeTrackingControls();
+            
+            debugLog('开始追踪状态检查...');
+            startTrackingStatusCheck();
+            
+            // 添加Socket.IO事件监听器
+            debugLog('添加Socket.IO事件监听器...');
+            initializeSocketListeners();
+            
+            debugLog('页面初始化完成');
+        } catch (error) {
+            debugLog(`初始化失败: ${error.message}`);
+            console.error('页面初始化错误:', error);
+        }
     });
     
-    // 初始化视频
+    // 初始化视频 - 改进版本，更可靠的加载检测
     function initializeVideo() {
         const iframe = document.getElementById('video-iframe');
         const loadingOverlay = document.getElementById('loading-overlay');
         
-        // 监听iframe加载事件
-        iframe.addEventListener('load', function() {
-            setTimeout(() => {
+        debugLog('开始初始化视频iframe');
+        
+        let loadingHidden = false;
+        
+        // 隐藏加载覆盖层的函数
+        function hideLoadingOverlay(reason) {
+            if (!loadingHidden) {
+                debugLog(`隐藏加载覆盖层: ${reason}`);
                 loadingOverlay.classList.add('hidden');
-                updateVideoStatus('online', '视频流已连接', '正在显示 TogetheROS 实时视频');
+                loadingHidden = true;
+                updateVideoStatus('online', '视频流已加载', reason);
+            }
+        }
+        
+        // 多重检测机制
+        
+        // 1. iframe load事件
+        iframe.addEventListener('load', function() {
+            debugLog('iframe load事件触发');
+            setTimeout(() => {
+                hideLoadingOverlay('iframe加载事件触发');
             }, 1000);
         });
         
-        // 监听iframe错误事件
+        // 2. iframe error事件
         iframe.addEventListener('error', function() {
-            updateVideoStatus('offline', '视频流连接失败', '无法连接到 TogetheROS 服务，请检查服务状态');
+            debugLog('iframe error事件触发');
+            updateVideoStatus('offline', '视频流连接失败', '无法连接到 TogetheROS 服务');
         });
         
-        // 设置超时检测
+        // 3. 检查iframe文档是否可访问
+        function checkIframeContent() {
+            try {
+                // 尝试访问iframe内容（只有同源才能访问）
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (iframeDoc && iframeDoc.readyState === 'complete') {
+                    debugLog('iframe文档已完成加载');
+                    hideLoadingOverlay('iframe文档readyState完成');
+                    return true;
+                }
+            } catch (e) {
+                // 跨域访问会抛出错误，这实际上说明iframe已经开始加载外部内容
+                debugLog('iframe跨域访问检测到内容加载');
+                hideLoadingOverlay('检测到跨域内容加载');
+                return true;
+            }
+            return false;
+        }
+        
+        // 4. 定期检查iframe状态
+        let checkCount = 0;
+        const maxChecks = 30; // 最多检查30次（15秒）
+        const checkInterval = setInterval(() => {
+            checkCount++;
+            debugLog(`iframe状态检查 ${checkCount}/${maxChecks}`);
+            
+            if (checkIframeContent() || checkCount >= maxChecks) {
+                clearInterval(checkInterval);
+                if (checkCount >= maxChecks && !loadingHidden) {
+                    debugLog('达到最大检查次数，强制隐藏加载覆盖层');
+                    hideLoadingOverlay('超时强制隐藏');
+                }
+            }
+        }, 500);
+        
+        // 5. 最终超时保护（10秒后强制隐藏）
         setTimeout(() => {
-            if (!loadingOverlay.classList.contains('hidden')) {
-                updateVideoStatus('offline', '加载超时', '视频流加载时间过长，请检查网络连接');
+            if (!loadingHidden) {
+                debugLog('10秒超时，强制隐藏加载覆盖层');
+                hideLoadingOverlay('10秒超时保护');
+            }
+            if (checkInterval) {
+                clearInterval(checkInterval);
             }
         }, 10000);
+        
+        // 6. 页面可见性变化时重新检查
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && !loadingHidden) {
+                debugLog('页面重新可见，检查iframe状态');
+                setTimeout(() => {
+                    if (checkIframeContent()) {
+                        if (checkInterval) {
+                            clearInterval(checkInterval);
+                        }
+                    }
+                }, 1000);
+            }
+        });
     }
     
     // 更新视频状态
@@ -333,15 +587,20 @@
         const statusText = document.getElementById('video-status-text');
         const statusDetails = document.getElementById('video-status-details');
         
-        // 移除所有状态类
-        indicator.classList.remove('status-online', 'status-offline', 'status-loading');
+        if (indicator) {
+            // 移除所有状态类
+            indicator.classList.remove('status-online', 'status-offline', 'status-loading');
+            // 添加新状态类
+            indicator.classList.add(`status-${status}`);
+        }
         
-        // 添加新状态类
-        indicator.classList.add(`status-${status}`);
+        if (statusText) {
+            statusText.textContent = text;
+        }
         
-        // 更新文本
-        statusText.textContent = text;
-        statusDetails.textContent = details;
+        if (statusDetails) {
+            statusDetails.textContent = details;
+        }
     }
     
     // 开始视频状态检查
@@ -359,14 +618,9 @@
                 method: 'HEAD',
                 mode: 'no-cors'
             });
-            
-            // 由于是no-cors模式，我们无法获取响应状态
-            // 但如果没有抛出错误，说明服务可能是可用的
-            console.log('视频服务检查：可能可用');
-            
+            debugLog('视频服务检查：可能可用');
         } catch (error) {
-            console.warn('视频服务检查失败:', error);
-            updateVideoStatus('offline', '服务检查失败', '无法连接到 TogetheROS 服务');
+            debugLog(`视频服务检查失败: ${error.message}`);
         }
     }
     
@@ -376,19 +630,36 @@
         const loadingOverlay = document.getElementById('loading-overlay');
         const iframe = document.getElementById('video-iframe');
         
+        debugLog('刷新视频');
+        
         // 显示加载状态
-        refreshBtn.classList.add('loading');
-        loadingOverlay.classList.remove('hidden');
+        if (refreshBtn) {
+            refreshBtn.classList.add('loading');
+        }
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('hidden');
+        }
         updateVideoStatus('loading', '正在刷新...', '重新连接到 TogetheROS 视频服务');
         
         // 重新加载iframe
-        const currentSrc = iframe.src;
-        iframe.src = '';
-        
-        setTimeout(() => {
-            iframe.src = currentSrc;
-            refreshBtn.classList.remove('loading');
-        }, 500);
+        if (iframe) {
+            const currentSrc = iframe.src;
+            iframe.src = '';
+            
+            setTimeout(() => {
+                iframe.src = currentSrc;
+                if (refreshBtn) {
+                    refreshBtn.classList.remove('loading');
+                }
+                // 3秒后隐藏加载层
+                setTimeout(() => {
+                    if (loadingOverlay) {
+                        loadingOverlay.classList.add('hidden');
+                        updateVideoStatus('online', '视频流已刷新', '正在显示 TogetheROS 实时视频');
+                    }
+                }, 3000);
+            }, 500);
+        }
     }
     
     // 切换全屏
@@ -396,27 +667,33 @@
         const container = document.getElementById('video-container');
         const icon = document.getElementById('fullscreen-icon');
         
+        debugLog('切换全屏模式');
+        
         if (!isFullscreen) {
             // 进入全屏
             document.body.classList.add('fullscreen-mode');
-            icon.classList.remove('fa-expand');
-            icon.classList.add('fa-compress');
+            if (icon) {
+                icon.classList.remove('fa-expand');
+                icon.classList.add('fa-compress');
+            }
             isFullscreen = true;
             
             // 尝试使用浏览器全屏API
-            if (container.requestFullscreen) {
+            if (container && container.requestFullscreen) {
                 container.requestFullscreen();
-            } else if (container.webkitRequestFullscreen) {
+            } else if (container && container.webkitRequestFullscreen) {
                 container.webkitRequestFullscreen();
-            } else if (container.msRequestFullscreen) {
+            } else if (container && container.msRequestFullscreen) {
                 container.msRequestFullscreen();
             }
             
         } else {
             // 退出全屏
             document.body.classList.remove('fullscreen-mode');
-            icon.classList.remove('fa-compress');
-            icon.classList.add('fa-expand');
+            if (icon) {
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
             isFullscreen = false;
             
             // 退出浏览器全屏
@@ -441,8 +718,11 @@
         if (!isDocumentFullscreen && isFullscreen) {
             // 用户通过ESC等方式退出了全屏
             document.body.classList.remove('fullscreen-mode');
-            document.getElementById('fullscreen-icon').classList.remove('fa-compress');
-            document.getElementById('fullscreen-icon').classList.add('fa-expand');
+            const icon = document.getElementById('fullscreen-icon');
+            if (icon) {
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
             isFullscreen = false;
         }
     }
@@ -452,6 +732,427 @@
         const host = window.location.hostname;
         const url = `http://${host}:8000/TogetheROS`;
         window.open(url, '_blank');
+        debugLog('在新标签页打开视频');
+    }
+    
+    // 初始化追踪控制
+    function initializeTrackingControls() {
+        try {
+            debugLog('开始初始化追踪控制');
+            
+            // 监听输入框回车键
+            const targetIdInput = document.getElementById('target-face-id');
+            if (targetIdInput) {
+                debugLog('为目标ID输入框添加回车键监听');
+                targetIdInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        debugLog('检测到回车键，触发追踪目标切换');
+                        switchTrackingTarget();
+                    }
+                });
+            } else {
+                debugLog('警告：未找到目标ID输入框');
+            }
+
+            // 初始化模式描述和指示器
+            debugLog('初始化模式描述和指示器');
+            updateModeDescription('default');
+            updateModeIndicators('default');
+            
+            debugLog('追踪控制初始化完成');
+        } catch (error) {
+            debugLog(`追踪控制初始化失败: ${error.message}`);
+            console.error('追踪控制初始化错误:', error);
+        }
+    }
+
+    // 开始追踪状态检查
+    function startTrackingStatusCheck() {
+        // 立即获取一次状态
+        fetchTrackingStatus();
+        
+        // 每2秒检查一次追踪状态
+        trackingStatusInterval = setInterval(() => {
+            fetchTrackingStatus();
+        }, 2000);
+    }
+
+    // 获取追踪状态
+    async function fetchTrackingStatus() {
+        try {
+            const response = await fetch('/api/tracking_status');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success && result.data) {
+                updateTrackingStatus(result.data);
+            } else {
+                debugLog('追踪状态API返回失败结果');
+            }
+        } catch (error) {
+            debugLog(`获取追踪状态失败: ${error.message}`);
+            updateTrackingStatus({
+                tracking_status: 'error',
+                current_tracking_id: null,
+                tracking_mode: 'unknown',
+                available_face_ids: [],
+                error: '网络错误'
+            });
+        }
+    }
+
+    // 更新追踪状态显示
+    function updateTrackingStatus(data) {
+        try {
+            const indicator = document.getElementById('tracking-status-indicator');
+            const statusText = document.getElementById('tracking-status-text');
+            const currentIdSpan = document.getElementById('current-tracking-id');
+            const modeSpan = document.getElementById('tracking-mode');
+            const availableFaceIds = document.getElementById('available-face-ids');
+
+            // 更新状态指示器
+            if (indicator) {
+                // 移除所有状态类
+                indicator.classList.remove('status-active', 'status-lost', 'status-idle', 'status-error', 'status-loading');
+                
+                // 添加对应状态类
+                const status = data.tracking_status || 'idle';
+                indicator.classList.add(`status-${status}`);
+            }
+
+            // 更新状态文本
+            if (statusText) {
+                const statusMessages = {
+                    'active': '正在追踪',
+                    'lost': '目标丢失',
+                    'idle': '空闲状态',
+                    'error': '错误状态'
+                };
+                statusText.textContent = statusMessages[data.tracking_status] || '未知状态';
+            }
+
+            // 更新当前追踪ID
+            if (currentIdSpan) {
+                const currentId = data.current_tracking_id;
+                const availableIds = data.available_face_ids || [];
+                
+                // 检查当前ID是否在可用ID列表中
+                if (currentId !== null && currentId !== undefined && availableIds.includes(currentId)) {
+                    currentIdSpan.textContent = currentId;
+                } else {
+                    currentIdSpan.textContent = 'loss';
+                }
+            }
+
+            // 更新追踪模式
+            if (modeSpan) {
+                const modeNames = {
+                    'default': '默认模式',
+                    'specified': '指定ID模式'
+                };
+                modeSpan.textContent = modeNames[data.tracking_mode] || data.tracking_mode || '未知';
+            }
+
+            // 更新可用人脸ID列表
+            if (availableFaceIds && Array.isArray(data.available_face_ids)) {
+                if (data.available_face_ids.length > 0) {
+                    availableFaceIds.innerHTML = data.available_face_ids.map(id => {
+                        const isCurrent = id === data.current_tracking_id;
+                        const badgeClass = isCurrent ? 'badge bg-success face-id-badge current' : 'badge bg-info face-id-badge';
+                        return `<span class="${badgeClass}" onclick="selectFaceId(${id})" title="点击追踪ID ${id}">${id}</span>`;
+                    }).join(' ');
+                } else {
+                    availableFaceIds.innerHTML = '<span class="badge bg-secondary">暂无可用人脸</span>';
+                }
+            }
+
+            // 根据当前追踪模式更新UI状态
+            if (data.tracking_mode) {
+                // 更新模式指示器显示
+                updateModeIndicators(data.tracking_mode);
+                updateModeDescription(data.tracking_mode);
+            }
+        } catch (error) {
+            debugLog(`更新追踪状态显示失败: ${error.message}`);
+        }
+    }
+
+    // 更新模式描述
+    function updateModeDescription(mode) {
+        const descriptionText = document.getElementById('mode-description-text');
+        if (descriptionText) {
+            const descriptions = {
+                'default': '默认模式：永远追踪最小ID，无等待逻辑',
+                'specified': '指定ID模式：支持指定ID追踪和等待逻辑'
+            };
+            descriptionText.textContent = descriptions[mode] || '未知模式';
+        }
+    }
+
+    // 更新模式指示器
+    function updateModeIndicators(currentMode) {
+        const defaultIndicator = document.getElementById('mode-default-indicator');
+        const specifiedIndicator = document.getElementById('mode-specified-indicator');
+        
+        if (defaultIndicator && specifiedIndicator) {
+            // 重置所有指示器为灰色
+            const defaultIcon = defaultIndicator.querySelector('i');
+            const defaultText = defaultIndicator.querySelector('span');
+            const specifiedIcon = specifiedIndicator.querySelector('i');
+            const specifiedText = specifiedIndicator.querySelector('span');
+            
+            // 默认状态 - 灰色
+            defaultIcon.className = 'fas fa-robot text-muted me-1';
+            defaultText.className = 'text-muted';
+            specifiedIcon.className = 'fas fa-bullseye text-muted me-1';
+            specifiedText.className = 'text-muted';
+            
+            // 根据当前模式高亮对应的指示器
+            if (currentMode === 'default') {
+                defaultIcon.className = 'fas fa-robot text-primary me-1';
+                defaultText.className = 'text-primary fw-bold';
+            } else if (currentMode === 'specified') {
+                specifiedIcon.className = 'fas fa-bullseye text-warning me-1';
+                specifiedText.className = 'text-warning fw-bold';
+            }
+        }
+    }
+
+    // 切换追踪目标
+    async function switchTrackingTarget() {
+        const targetIdInput = document.getElementById('target-face-id');
+        const targetId = parseInt(targetIdInput.value);
+        
+        debugLog(`准备切换追踪目标到ID: ${targetId}`);
+        
+        if (isNaN(targetId) || targetId < 1 || targetId > 99) {
+            showNotification('error', '请输入有效的ID (1-99)');
+            return;
+        }
+        
+        try {
+            // 显示加载状态
+            const trackingButton = document.querySelector('button[onclick="switchTrackingTarget()"]');
+            let originalText = '';
+            if (trackingButton) {
+                originalText = trackingButton.innerHTML;
+                trackingButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>切换中...';
+                trackingButton.disabled = true;
+            }
+
+            debugLog(`发送切换追踪目标请求: ID=${targetId}`);
+
+            // 先切换追踪目标
+            const switchResponse = await fetch('/api/switch_tracking_target', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    target_face_id: targetId
+                })
+            });
+
+            const switchResult = await switchResponse.json();
+            debugLog(`切换追踪目标响应: ${JSON.stringify(switchResult)}`);
+
+            if (switchResult.success) {
+                // 再设置追踪模式为指定ID模式
+                const modeResponse = await fetch('/api/tracking_mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        mode: 'specified'
+                    })
+                });
+
+                const modeResult = await modeResponse.json();
+                debugLog(`设置追踪模式响应: ${JSON.stringify(modeResult)}`);
+
+                if (modeResult.success) {
+                    // 显示成功消息
+                    showNotification('success', `成功切换到追踪ID: ${targetId}`);
+                    
+                    // 更新模式指示器到指定ID模式
+                    updateModeIndicators('specified');
+                    updateModeDescription('specified');
+                } else {
+                    showNotification('warning', `追踪目标已切换，但模式设置失败: ${modeResult.message}`);
+                }
+            } else {
+                showNotification('error', `切换失败: ${switchResult.message}`);
+            }
+
+            // 恢复按钮状态
+            if (trackingButton) {
+                trackingButton.innerHTML = originalText;
+                trackingButton.disabled = false;
+            }
+
+        } catch (error) {
+            debugLog(`切换追踪目标请求失败: ${error.message}`);
+            showNotification('error', '网络错误，请稍后重试');
+            
+            // 恢复按钮状态
+            const trackingButton = document.querySelector('button[onclick="switchTrackingTarget()"]');
+            if (trackingButton) {
+                trackingButton.innerHTML = '<i class="fas fa-crosshairs me-1"></i>追踪';
+                trackingButton.disabled = false;
+            }
+        }
+    }
+
+    // 切换到自动模式
+    async function switchToAutoMode() {
+        debugLog('切换到自动模式');
+        
+        try {
+            // 显示加载状态
+            const autoModeButton = document.querySelector('button[onclick="switchToAutoMode()"]');
+            let originalText = '';
+            if (autoModeButton) {
+                originalText = autoModeButton.innerHTML;
+                autoModeButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>切换中...';
+                autoModeButton.disabled = true;
+            }
+
+            // 先切换追踪目标到自动模式
+            const switchResponse = await fetch('/api/switch_tracking_target', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    target_face_id: -1
+                })
+            });
+
+            const switchResult = await switchResponse.json();
+            debugLog(`切换追踪目标响应: ${JSON.stringify(switchResult)}`);
+
+            if (switchResult.success) {
+                // 再设置追踪模式为默认模式
+                const modeResponse = await fetch('/api/tracking_mode', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        mode: 'default'
+                    })
+                });
+
+                const modeResult = await modeResponse.json();
+                debugLog(`设置追踪模式响应: ${JSON.stringify(modeResult)}`);
+
+                if (modeResult.success) {
+                    showNotification('success', '已切换到默认模式');
+                    
+                    // 更新模式指示器到默认模式
+                    updateModeIndicators('default');
+                    updateModeDescription('default');
+                } else {
+                    showNotification('warning', `追踪目标已切换，但模式设置失败: ${modeResult.message}`);
+                }
+            } else {
+                showNotification('error', `切换失败: ${switchResult.message}`);
+            }
+
+            // 恢复按钮状态
+            if (autoModeButton) {
+                autoModeButton.innerHTML = originalText;
+                autoModeButton.disabled = false;
+            }
+
+        } catch (error) {
+            debugLog(`切换到自动模式失败: ${error.message}`);
+            showNotification('error', '网络错误，请稍后重试');
+            
+            // 恢复按钮状态
+            const autoModeButton = document.querySelector('button[onclick="switchToAutoMode()"]');
+            if (autoModeButton) {
+                autoModeButton.innerHTML = '<i class="fas fa-undo me-1"></i>切换到自动模式';
+                autoModeButton.disabled = false;
+            }
+        }
+    }
+
+    // 选择人脸ID（点击徽章时调用）
+    function selectFaceId(faceId) {
+        debugLog(`选择人脸ID: ${faceId}`);
+        
+        const targetIdInput = document.getElementById('target-face-id');
+        if (targetIdInput) {
+            targetIdInput.value = faceId;
+            // 立即切换追踪目标
+            switchTrackingTarget();
+        }
+    }
+
+    // 显示通知消息
+    function showNotification(type, message) {
+        debugLog(`显示通知: ${type} - ${message}`);
+        
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            animation: slideInRight 0.3s ease;
+        `;
+        
+        notification.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+
+        document.body.appendChild(notification);
+
+        // 3秒后自动消失
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+
+    // 设置追踪模式（手动切换模式时调用）
+    async function setTrackingMode(mode) {
+        debugLog(`设置追踪模式: ${mode}`);
+        
+        try {
+            const response = await fetch('/api/tracking_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    mode: mode
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showNotification('success', `已切换到${mode === 'default' ? '默认' : '指定ID'}模式`);
+            } else {
+                showNotification('error', `模式切换失败: ${result.message}`);
+            }
+
+        } catch (error) {
+            debugLog(`设置追踪模式失败: ${error.message}`);
+            showNotification('error', '网络错误，请稍后重试');
+        }
     }
     
     // 键盘快捷键
@@ -480,6 +1181,25 @@
         if (videoCheckInterval) {
             clearInterval(videoCheckInterval);
         }
+        if (trackingStatusInterval) {
+            clearInterval(trackingStatusInterval);
+        }
     });
+
+    // 初始化Socket.IO事件监听器
+    function initializeSocketListeners() {
+        try {
+            // 监听追踪状态更新
+            socket.on('tracking_status_update', function(data) {
+                debugLog('收到追踪状态更新');
+                updateTrackingStatus(data);
+            });
+            
+            debugLog('Socket.IO事件监听器已添加');
+        } catch (error) {
+            debugLog(`添加Socket.IO事件监听器失败: ${error.message}`);
+            console.error('Socket.IO事件监听器添加失败:', error);
+        }
+    }
 </script>
 {% endblock %} 

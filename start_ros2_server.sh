@@ -38,6 +38,36 @@ else
     fi
 fi
 
+# 检查并加载PTZ接口环境
+echo -e "\n${BLUE}检查 PTZ 接口环境...${NC}"
+PTZ_SETUP_PATH="/home/sunrise/ptz_ws/install/setup.bash"
+if [ -f "$PTZ_SETUP_PATH" ]; then
+    echo -e "${GREEN}✓ 找到 PTZ 接口环境设置文件${NC}"
+    source "$PTZ_SETUP_PATH"
+    echo -e "${GREEN}✓ PTZ 接口环境已加载${NC}"
+    
+    # 验证PTZ接口模块
+    python3 -c "
+try:
+    from ptz_interfaces.srv import SwitchTrackingTarget
+    print('  ✓ ptz_interfaces.srv.SwitchTrackingTarget 可用')
+except ImportError as e:
+    print(f'  ✗ PTZ接口导入失败: {e}')
+    exit(1)
+" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ PTZ 接口模块验证成功${NC}"
+    else
+        echo -e "${RED}✗ PTZ 接口模块验证失败${NC}"
+        echo -e "${YELLOW}  追踪目标切换功能将不可用${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ 未找到 PTZ 接口环境设置文件: $PTZ_SETUP_PATH${NC}"
+    echo -e "${YELLOW}  请确保已编译 PTZ 接口包${NC}"
+    echo -e "${YELLOW}  追踪目标切换功能将不可用${NC}"
+fi
+
 # 检查Python依赖
 echo -e "\n${BLUE}检查 Python 依赖...${NC}"
 

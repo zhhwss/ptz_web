@@ -372,6 +372,7 @@
                             </div>
                         </div>
                     </div>
+            
                     
                     <!-- 人脸检测状态 -->
                     <div class="col-md-2">
@@ -384,6 +385,22 @@
                                 <div id="face-fps-status" class="status-value">
                                     <span id="face-fps-text">0.0fps</span>
                                     <small id="face-fps-desc" class="text-muted d-block">检查中...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 追踪模式状态 -->
+                    <div class="col-md-2">
+                        <div class="status-item">
+                            <div class="status-icon">
+                                <i class="fas fa-crosshairs"></i>
+                            </div>
+                            <div class="status-content">
+                                <h6>追踪模式</h6>
+                                <div id="tracking-mode-status" class="status-value">
+                                    <span id="tracking-mode-current-id">ID: 无</span>
+                                    <small id="tracking-mode-desc" class="text-muted d-block">模式: 默认模式</small>
                                 </div>
                             </div>
                         </div>
@@ -971,14 +988,18 @@
                 addToHistory(selectedSample, true, '命令已发送');
                 
                 // 更新状态栏显示发送成功（不使用模态框）
-                const currentStatus = document.getElementById('ptz-current-status');
-                currentStatus.textContent = `已发送: ${selectedSample}`;
-                currentStatus.style.color = '#28a745'; // 绿色表示成功
-                
-                // 3秒后恢复原始状态
-                setTimeout(() => {
-                    currentStatus.style.color = '';
-                }, 3000);
+                const currentStatus = document.getElementById('status-text');
+                if (currentStatus) {
+                    const originalText = currentStatus.textContent;
+                    currentStatus.textContent = `已发送: ${selectedSample}`;
+                    currentStatus.style.color = '#28a745'; // 绿色表示成功
+                    
+                    // 3秒后恢复原始状态
+                    setTimeout(() => {
+                        currentStatus.style.color = '';
+                        currentStatus.textContent = originalText;
+                    }, 3000);
+                }
                 
             } else {
                 executeBtn.innerHTML = originalText;
@@ -986,15 +1007,17 @@
                 addToHistory(selectedSample, false, result.message);
                 
                 // 显示错误状态（不使用模态框）
-                const currentStatus = document.getElementById('ptz-current-status');
-                currentStatus.textContent = `发送失败: ${result.message}`;
-                currentStatus.style.color = '#dc3545'; // 红色表示失败
-                
-                // 5秒后恢复原始状态
-                setTimeout(() => {
-                    currentStatus.style.color = '';
-                    currentStatus.textContent = '等待数据...';
-                }, 5000);
+                const currentStatus = document.getElementById('status-text');
+                if (currentStatus) {
+                    currentStatus.textContent = `发送失败: ${result.message}`;
+                    currentStatus.style.color = '#dc3545'; // 红色表示失败
+                    
+                    // 5秒后恢复原始状态
+                    setTimeout(() => {
+                        currentStatus.style.color = '';
+                        currentStatus.textContent = '等待数据...';
+                    }, 5000);
+                }
             }
             
         } catch (error) {
@@ -1004,15 +1027,17 @@
             addToHistory(selectedSample, false, `网络错误: ${error.message}`);
             
             // 显示网络错误（不使用模态框）
-            const currentStatus = document.getElementById('ptz-current-status');
-            currentStatus.textContent = `网络错误: ${error.message}`;
-            currentStatus.style.color = '#dc3545'; // 红色表示错误
-            
-            // 5秒后恢复原始状态
-            setTimeout(() => {
-                currentStatus.style.color = '';
-                currentStatus.textContent = '等待数据...';
-            }, 5000);
+            const currentStatus = document.getElementById('status-text');
+            if (currentStatus) {
+                currentStatus.textContent = `网络错误: ${error.message}`;
+                currentStatus.style.color = '#dc3545'; // 红色表示错误
+                
+                // 5秒后恢复原始状态
+                setTimeout(() => {
+                    currentStatus.style.color = '';
+                    currentStatus.textContent = '等待数据...';
+                }, 5000);
+            }
         }
     }
     
@@ -1369,6 +1394,9 @@
         // 初始化人脸检测频率
         initializeFaceFps();
         
+        // 初始化追踪模式状态
+        initializeTrackingModeStatus();
+        
         // 初始化折叠组件动画
         initCollapseAnimations();
         
@@ -1517,10 +1545,66 @@
         }
     }
     
+    // 更新追踪模式状态显示
+    function updateTrackingModeStatus(data) {
+        const currentIdElement = document.getElementById('tracking-mode-current-id');
+        const modeDescElement = document.getElementById('tracking-mode-desc');
+        
+        if (currentIdElement && data) {
+            // 更新当前追踪ID
+            const currentId = data.current_tracking_id;
+            const availableIds = data.available_face_ids || [];
+            
+            // 检查当前ID是否在可用ID列表中
+            if (currentId !== null && currentId !== undefined && availableIds.includes(currentId)) {
+                currentIdElement.textContent = `ID: ${currentId}`;
+                currentIdElement.className = 'text-success fw-bold';
+            } else {
+                currentIdElement.textContent = 'ID: loss';
+                currentIdElement.className = 'text-danger fw-bold';
+            }
+        }
+        
+        if (modeDescElement && data) {
+            // 更新追踪模式描述
+            const modeNames = {
+                'default': '默认模式',
+                'specified': '指定ID模式'
+            };
+            const modeName = modeNames[data.tracking_mode] || data.tracking_mode || '未知';
+            modeDescElement.textContent = `模式: ${modeName}`;
+        }
+    }
+    
+    // 初始化追踪模式状态
+    async function initializeTrackingModeStatus() {
+        try {
+            const response = await fetch('/api/tracking_status');
+            const result = await response.json();
+            
+            if (result.success) {
+                updateTrackingModeStatus(result.data);
+            }
+        } catch (error) {
+            console.error('初始化追踪模式状态失败:', error);
+            // 设置默认显示
+            updateTrackingModeStatus({
+                current_tracking_id: null,
+                tracking_mode: 'unknown'
+            });
+        }
+    }
+    
     // 监听人脸检测帧率更新
     socket.on('face_fps_update', function(data) {
         console.log('人脸检测频率更新:', data);
         updateFaceFpsDisplay(data);
+    });
+    
+    // 监听追踪状态更新
+    socket.on('tracking_status_update', function(data) {
+        console.log('追踪状态更新:', data);
+        updateTrackingModeStatus(data);
     });
 </script>
 {% endblock %} 
